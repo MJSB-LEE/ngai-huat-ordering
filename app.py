@@ -4,6 +4,7 @@ import sqlite3
 import urllib.parse
 import base64
 import io
+import os
 import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
@@ -85,6 +86,17 @@ LIVE_SEARCH_JS = """
 </script>
 """
 
+# DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
+def get_db_connection():
+    if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
+        import libsql_experimental as libsql
+        return libsql.connect(
+            database=st.secrets["TURSO_DATABASE_URL"],
+            auth_token=st.secrets["TURSO_AUTH_TOKEN"]
+        )
+    else:
+        return sqlite3.connect("pos_inventory.db")
+
 def image_to_base64(uploaded_file):
     if uploaded_file is not None:
         try:
@@ -108,7 +120,7 @@ def image_to_base64(uploaded_file):
     return None
 
 def init_db():
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     
     c.execute('''
@@ -144,32 +156,6 @@ def init_db():
         )
     ''')
 
-    c.execute("PRAGMA table_info(cashiers)")
-    cols = [col[1] for col in c.fetchall()]
-    if "sort_order" not in cols:
-        c.execute("ALTER TABLE cashiers ADD COLUMN sort_order INTEGER DEFAULT 0")
-    if "email" not in cols:
-        c.execute("ALTER TABLE cashiers ADD COLUMN email TEXT DEFAULT ''")
-    if "smtp_password" not in cols:
-        c.execute("ALTER TABLE cashiers ADD COLUMN smtp_password TEXT DEFAULT ''")
-
-    c.execute("PRAGMA table_info(locations)")
-    cols_loc = [col[1] for col in c.fetchall()]
-    if "sort_order" not in cols_loc:
-        c.execute("ALTER TABLE locations ADD COLUMN sort_order INTEGER DEFAULT 0")
-
-    c.execute("SELECT COUNT(*) FROM cashiers")
-    if c.fetchone()[0] == 0:
-        c.executemany("INSERT INTO cashiers (name, sort_order, email, smtp_password) VALUES (?, ?, ?, ?)", [
-            ("BEBELYN", 1, "", ""),
-            ("CASHIER 01", 2, "", ""),
-            ("ADMIN", 3, "", "")
-        ])
-        
-    c.execute("SELECT COUNT(*) FROM locations")
-    if c.fetchone()[0] == 0:
-        c.executemany("INSERT INTO locations VALUES (?, ?)", [("MAIN BRANCH", 1), ("STYLAND", 2)])
-
     c.execute('''
         CREATE TABLE IF NOT EXISTS order_counter (
             yymm TEXT PRIMARY KEY,
@@ -194,6 +180,18 @@ def init_db():
     ''')
     conn.commit()
 
+    c.execute("SELECT COUNT(*) FROM cashiers")
+    if c.fetchone()[0] == 0:
+        c.executemany("INSERT INTO cashiers (name, sort_order, email, smtp_password) VALUES (?, ?, ?, ?)", [
+            ("BEBELYN", 1, "", ""),
+            ("CASHIER 01", 2, "", ""),
+            ("ADMIN", 3, "", "")
+        ])
+        
+    c.execute("SELECT COUNT(*) FROM locations")
+    if c.fetchone()[0] == 0:
+        c.executemany("INSERT INTO locations VALUES (?, ?)", [("MAIN BRANCH", 1), ("STYLAND", 2)])
+
     c.execute("SELECT COUNT(*) FROM menu")
     if c.fetchone()[0] == 0:
         default_items = [
@@ -203,11 +201,12 @@ def init_db():
             ("D01", "Coca-Cola 1.5L", "Beverages", 4.20, "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=150")
         ]
         c.executemany("INSERT INTO menu VALUES (?, ?, ?, ?, ?)", default_items)
-        conn.commit()
+    
+    conn.commit()
     conn.close()
 
 def get_setting(key, default_value=""):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT value FROM settings WHERE key = ?", (key,))
     row = c.fetchone()
@@ -215,14 +214,14 @@ def get_setting(key, default_value=""):
     return row[0] if row else default_value
 
 def save_setting(key, value):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value).strip()))
     conn.commit()
     conn.close()
 
 def get_cashiers():
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT name FROM cashiers ORDER BY sort_order ASC, name ASC")
     rows = [r[0] for r in c.fetchall()]
@@ -230,7 +229,7 @@ def get_cashiers():
     return rows if rows else ["DEFAULT CASHIER"]
 
 def get_cashier_details(name):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT email, smtp_password FROM cashiers WHERE name = ?", (name,))
     row = c.fetchone()
@@ -238,7 +237,7 @@ def get_cashier_details(name):
     return row if row else ("", "")
 
 def save_cashiers_order(ordered_names):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     for index, name in enumerate(ordered_names):
         c.execute("UPDATE cashiers SET sort_order = ? WHERE name = ?", (index + 1, name))
@@ -246,7 +245,7 @@ def save_cashiers_order(ordered_names):
     conn.close()
 
 def add_cashier(name, email="", smtp_password=""):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM cashiers")
     new_order = c.fetchone()[0]
@@ -256,7 +255,7 @@ def add_cashier(name, email="", smtp_password=""):
     conn.close()
 
 def update_cashier_details(old_name, new_name, email, smtp_password):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT sort_order FROM cashiers WHERE name = ?", (old_name,))
     row = c.fetchone()
@@ -268,14 +267,14 @@ def update_cashier_details(old_name, new_name, email, smtp_password):
     conn.close()
 
 def delete_cashier(name):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM cashiers WHERE name = ?", (name,))
     conn.commit()
     conn.close()
 
 def get_locations():
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT name FROM locations ORDER BY sort_order ASC, name ASC")
     rows = [r[0] for r in c.fetchall()]
@@ -283,7 +282,7 @@ def get_locations():
     return rows if rows else ["MAIN BRANCH"]
 
 def save_locations_order(ordered_names):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     for index, name in enumerate(ordered_names):
         c.execute("UPDATE locations SET sort_order = ? WHERE name = ?", (index + 1, name))
@@ -291,7 +290,7 @@ def save_locations_order(ordered_names):
     conn.close()
 
 def add_location(name):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM locations")
     new_order = c.fetchone()[0]
@@ -300,7 +299,7 @@ def add_location(name):
     conn.close()
 
 def update_location_name(old_name, new_name):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT sort_order FROM locations WHERE name = ?", (old_name,))
     row = c.fetchone()
@@ -311,7 +310,7 @@ def update_location_name(old_name, new_name):
     conn.close()
 
 def delete_location(name):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM locations WHERE name = ?", (name,))
     conn.commit()
@@ -319,7 +318,7 @@ def delete_location(name):
 
 def get_next_order_number():
     current_yymm = datetime.now().strftime("%y%m")
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT last_seq FROM order_counter WHERE yymm = ?", (current_yymm,))
     row = c.fetchone()
@@ -334,7 +333,7 @@ def get_next_order_number():
     return order_num, current_yymm, next_seq
 
 def save_new_order(order_no, customer, location, cashier, items_summary, total_amount, yymm, seq):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
@@ -344,7 +343,7 @@ def save_new_order(order_no, customer, location, cashier, items_summary, total_a
     conn.close()
 
 def get_orders_by_status(status, month_filter=None):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     if month_filter and month_filter != "All Months":
         query = "SELECT order_no, customer_name, location, cashier, items_summary, total_amount, created_at, completed_at, cancelled_at, cancel_reason FROM orders WHERE status = ? AND strftime('%Y-%m', created_at) = ? ORDER BY created_at DESC"
@@ -357,7 +356,7 @@ def get_orders_by_status(status, month_filter=None):
     return rows
 
 def get_available_order_months():
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT DISTINCT strftime('%Y-%m', created_at) FROM orders WHERE created_at IS NOT NULL ORDER BY created_at DESC")
     rows = c.fetchall()
@@ -369,7 +368,7 @@ def get_available_order_months():
     return ["All Months"] + months
 
 def get_menu_items():
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT code, name, category, price, image_data FROM menu")
     rows = c.fetchall()
@@ -386,7 +385,7 @@ def get_menu_items():
     return menu
 
 def add_or_update_menu_item(code, name, category, price, image_data):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     if image_data is None:
         c.execute("SELECT image_data FROM menu WHERE code = ?", (code,))
@@ -399,14 +398,14 @@ def add_or_update_menu_item(code, name, category, price, image_data):
     conn.close()
 
 def delete_menu_item(code):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM menu WHERE code = ?", (code,))
     conn.commit()
     conn.close()
 
 def update_order_status(order_no, status, cancel_reason=""):
-    conn = sqlite3.connect("pos_inventory.db")
+    conn = get_db_connection()
     c = conn.cursor()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if status == "Completed":
@@ -449,7 +448,7 @@ else:
         st.query_params.clear()
         st.rerun()
 
-# Load General Settings from DB
+# Load Settings
 company_name_setting = get_setting("company_name", "SYARIKAT NGAI HUAT SDN BHD")
 active_branch_setting = get_setting("active_branch_location", "")
 img_size = int(get_setting("item_image_width", "100"))
@@ -464,7 +463,6 @@ if not st.session_state.is_admin:
     menu_data = get_menu_items()
     active_locations = get_locations()
     
-    # Selected location from settings or fallback to first available location
     display_location = active_branch_setting if active_branch_setting in active_locations else (active_locations[0] if active_locations else "MAIN BRANCH")
     
     st.markdown(f"""
@@ -788,7 +786,6 @@ else:
     with tab_settings:
         st.subheader("⚙️ System Configuration & General Settings")
         
-        # COMPANY NAME & ACTIVE BRANCH LOCATION SETTINGS
         with st.container(border=True):
             st.markdown("### 🏢 Company & Active Branch Settings")
             
