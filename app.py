@@ -87,6 +87,7 @@ LIVE_SEARCH_JS = """
 """
 
 # DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
+@st.cache_resource
 def get_db_connection():
     if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
         import libsql
