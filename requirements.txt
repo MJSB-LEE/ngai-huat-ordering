@@ -4,4 +4,4 @@ pandas
 pillow
 streamlit-sortables
 openpyxl
-libsql-experimental
+requests
