@@ -1,4 +1,5 @@
 streamlit
+starlette<0.40.0
 pandas
 pillow
 streamlit-sortables
