@@ -87,6 +87,7 @@ LIVE_SEARCH_JS = """
 """
 
 # DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
+@st.cache_resource
 def get_db_connection():
     if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
         import libsql
@@ -96,6 +97,13 @@ def get_db_connection():
         )
     else:
         return sqlite3.connect("pos_inventory.db")
+        
+# 2. Query function (gets a fresh cursor from the cached connection)
+def run_query(query, params=()):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    return cursor.fetchall()
 
 def image_to_base64(uploaded_file):
     if uploaded_file is not None:
