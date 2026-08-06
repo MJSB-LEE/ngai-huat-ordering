@@ -647,10 +647,6 @@ st.markdown("##### 📦 Item Catalog")
                                 st.session_state.cart[code] += 1
                                 st.rerun()
                                 
-    st.write("---")
-    st.markdown("### 🛒 Your Order Slip")
-    current_order_no, current_yymm, current_seq = get_next_order_number()
-
     if not st.session_state.cart:
         st.info("Your cart is empty. Select items above to start ordering.")
     else:
