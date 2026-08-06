@@ -907,7 +907,6 @@ else:
         if "manage_action" not in st.session_state:
             st.session_state.manage_action = "➕ Add New Item"
 
-        # Determine index for radio button
         default_index = (
             actions.index(st.session_state.manage_action)
             if st.session_state.manage_action in actions
@@ -923,7 +922,6 @@ else:
                 index=default_index,
                 horizontal=True,
             )
-            # Sync selection back to state
             st.session_state.manage_action = mode
 
             if mode == "➕ Add New Item":
@@ -976,7 +974,6 @@ else:
                     selected_item = current_menu[selected_code]
 
                     with st.form("edit_item_form"):
-                        # Allow changing the Item Code (SKU)
                         edit_code = st.text_input(
                             "Item Code (SKU)", value=selected_code
                         ).upper().strip()
@@ -1001,7 +998,6 @@ else:
                                 else None
                             )
 
-                            # If Item Code was edited, delete old record and create new one
                             if edit_code != selected_code:
                                 delete_menu_item(selected_code)
 
@@ -1050,6 +1046,8 @@ else:
                         st.dataframe(df_ac.head(5), use_container_width=True)
 
                         cols = df_ac.columns.tolist()
+                        cat_options = ["(Set Fixed Category)"] + cols
+
                         c1, c2, c3, c4 = st.columns(4)
 
                         with c1:
@@ -1063,16 +1061,26 @@ else:
                                 index=1 if len(cols) > 1 else 0,
                             )
                         with c3:
+                            # Default to 3rd column if available, else offer fixed option
+                            default_cat_idx = 3 if len(cols) > 2 else 0
                             col_cat = st.selectbox(
                                 "Category Column:",
-                                cols,
-                                index=2 if len(cols) > 2 else 0,
+                                cat_options,
+                                index=default_cat_idx,
                             )
                         with c4:
                             col_price = st.selectbox(
                                 "Price Column:",
                                 cols,
                                 index=3 if len(cols) > 3 else 0,
+                            )
+
+                        # If user chooses to set a fixed category manually
+                        fixed_cat_val = ""
+                        if col_cat == "(Set Fixed Category)":
+                            fixed_cat_val = st.text_input(
+                                "Type Category Name for All Imported Items:",
+                                value="General",
                             )
 
                         if st.button(
@@ -1090,17 +1098,36 @@ else:
                                     if pd.notna(row[col_name])
                                     else ""
                                 )
-                                cat_val = (
-                                    str(row[col_cat]).capitalize().strip()
-                                    if pd.notna(row[col_cat])
-                                    else "General"
-                                )
 
-                                # Clean price string (strips "RM", spaces, commas)
-                                raw_price = str(row[col_price]) if pd.notna(row[col_price]) else "0.0"
-                                cleaned_price_str = re.sub(r"[^\d.]", "", raw_price)
+                                # Determine Category value
+                                if col_cat == "(Set Fixed Category)":
+                                    cat_val = (
+                                        fixed_cat_val.capitalize().strip()
+                                        if fixed_cat_val.strip()
+                                        else "General"
+                                    )
+                                else:
+                                    cat_val = (
+                                        str(row[col_cat]).capitalize().strip()
+                                        if pd.notna(row[col_cat])
+                                        else "General"
+                                    )
+
+                                # Clean price string
+                                raw_price = (
+                                    str(row[col_price])
+                                    if pd.notna(row[col_price])
+                                    else "0.0"
+                                )
+                                cleaned_price_str = re.sub(
+                                    r"[^\d.]", "", raw_price
+                                )
                                 try:
-                                    price_val = float(cleaned_price_str) if cleaned_price_str else 0.0
+                                    price_val = (
+                                        float(cleaned_price_str)
+                                        if cleaned_price_str
+                                        else 0.0
+                                    )
                                 except (ValueError, TypeError):
                                     price_val = 0.0
 
@@ -1115,7 +1142,7 @@ else:
                                     imported_count += 1
 
                             st.success(
-                                f"🎉 Successfully imported {imported_count} items with prices into Supabase!"
+                                f"🎉 Successfully imported {imported_count} items into Supabase!"
                             )
                             st.rerun()
 
