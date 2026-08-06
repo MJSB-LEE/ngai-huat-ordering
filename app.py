@@ -892,8 +892,16 @@ else:
                 st.error(f"Error reading file: {e}")
 
     # --- TAB 4: ADD / EDIT / MANAGE INVENTORY ---
+    # --- TAB 4: ADD / EDIT / MANAGE INVENTORY ---
+    import re
+
     with tab_manage:
         current_menu = get_menu_items()
+
+        # Initialize manage_mode in session state if not set
+        if "manage_mode" not in st.session_state:
+            st.session_state.manage_mode = "➕ Add New Item"
+
         col_forms, col_list = st.columns([2, 3])
 
         with col_forms:
@@ -904,7 +912,7 @@ else:
                     "✏️ Edit / Update Item",
                     "📥 Import from AutoCount",
                 ],
-                key="radio_manage_mode",
+                key="manage_mode",
                 horizontal=True,
             )
 
@@ -958,7 +966,10 @@ else:
                     selected_item = current_menu[selected_code]
 
                     with st.form("edit_item_form"):
-                        st.write(f"Editing Item Code: **{selected_code}**")
+                        # Allow changing the Item Code (SKU)
+                        edit_code = st.text_input(
+                            "Item Code (SKU)", value=selected_code
+                        ).upper().strip()
                         edit_name = st.text_input(
                             "Item Name", value=selected_item["name"]
                         )
@@ -979,16 +990,20 @@ else:
                                 if edit_uploaded_file
                                 else None
                             )
+
+                            # If Item Code was edited, delete old record and create new one
+                            if edit_code != selected_code:
+                                delete_menu_item(selected_code)
+
                             add_or_update_menu_item(
-                                selected_code,
+                                edit_code,
                                 edit_name,
                                 edit_cat,
                                 edit_price,
                                 img_data,
                             )
-                            st.success(
-                                f"Updated item [{selected_code}] successfully!"
-                            )
+                            st.session_state.editing_code = edit_code
+                            st.success(f"Updated item [{edit_code}] successfully!")
                             st.rerun()
 
                     st.write("---")
@@ -1071,8 +1086,11 @@ else:
                                     else "General"
                                 )
 
+                                # Clean price column string (removes "RM", spaces, commas)
+                                raw_price = str(row[col_price]) if pd.notna(row[col_price]) else "0.0"
+                                cleaned_price_str = re.sub(r"[^\d.]", "", raw_price)
                                 try:
-                                    price_val = float(row[col_price])
+                                    price_val = float(cleaned_price_str) if cleaned_price_str else 0.0
                                 except (ValueError, TypeError):
                                     price_val = 0.0
 
@@ -1087,7 +1105,7 @@ else:
                                     imported_count += 1
 
                             st.success(
-                                f"🎉 Successfully imported {imported_count} items into Supabase!"
+                                f"🎉 Successfully imported {imported_count} items with prices into Supabase!"
                             )
                             st.rerun()
 
@@ -1115,8 +1133,8 @@ else:
                             use_container_width=True,
                         ):
                             st.session_state.editing_code = code
+                            st.session_state.manage_mode = "✏️ Edit / Update Item"
                             st.rerun()
-
     # --- TAB 5: SYSTEM CONFIGURATION, COMPANY & LOCATION SETTINGS ---
     with tab_settings:
         st.subheader("⚙️ System Configuration & General Settings")
