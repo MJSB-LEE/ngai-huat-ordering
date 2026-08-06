@@ -45,8 +45,9 @@ MOBILE_CSS = """
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 5rem !important;
-        padding-left: 0.8rem !important;
-        padding-right: 0.8rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        max-width: 100% !important;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -56,35 +57,41 @@ MOBILE_CSS = """
     }
 
     .stButton button {
-        border-radius: 10px !important;
-        min-height: 40px !important;
+        border-radius: 8px !important;
+        min-height: 38px !important;
         font-weight: bold !important;
+        padding: 0px 8px !important;
     }
     
     .shop-header {
         background-color: #1e1e1e;
         border-radius: 12px;
-        padding: 16px;
+        padding: 12px;
         text-align: center;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
         border: 1px solid #333;
     }
     .shop-title {
         color: #f1c40f;
-        font-size: 22px;
+        font-size: 18px;
         font-weight: bold;
         margin: 0;
     }
     .shop-location {
         color: #bdc3c7;
-        font-size: 14px;
+        font-size: 13px;
         margin-top: 4px;
     }
 
-    /* Prevent horizontal columns from stacking vertically on mobile */
+    /* Fix layout width and column wrapping for mobile screen */
     div[data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
-        flex-wrap: nowrap !important;
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
+
+    div[data-testid="column"] {
+        min-width: 0 !important;
     }
 </style>
 """
