@@ -351,14 +351,12 @@ def get_orders_by_status(status, month_filter=None):
     )
 
     if month_filter and month_filter != "All Months":
-        # Filter for ISO formatted date prefix (YYYY-MM)
         query = query.gte("created_at", f"{month_filter}-01").lte(
             "created_at", f"{month_filter}-31 23:59:59"
         )
 
     response = query.order("created_at", desc=True).execute()
 
-    # Format return rows as tuple matching previous SQLite structure
     rows = []
     for o in response.data:
         rows.append((
@@ -374,6 +372,7 @@ def get_orders_by_status(status, month_filter=None):
             o.get("cancel_reason"),
         ))
     return rows
+
 
 def get_available_order_months():
     try:
@@ -537,7 +536,7 @@ if not st.session_state.is_admin:
     )
     selected_category = st.radio("Category:", categories, horizontal=True)
 
-filtered_menu = {}
+    filtered_menu = {}
     for code, details in menu_data.items():
         matches_cat = (
             selected_category == "All"
@@ -646,6 +645,7 @@ filtered_menu = {}
                             ):
                                 st.session_state.cart[code] += 1
                                 st.rerun()
+
     st.write("---")
     st.markdown("### 🛒 Your Order Slip")
 
@@ -683,6 +683,11 @@ filtered_menu = {}
                 if not client_name.strip():
                     st.error("⚠️ Please fill in Customer Name!")
                 else:
+                    # Generate next order sequence and YYMM number
+                    current_order_no, current_yymm, current_seq = (
+                        get_next_order_number()
+                    )
+
                     save_new_order(
                         current_order_no,
                         client_name.strip(),
@@ -704,6 +709,7 @@ filtered_menu = {}
             if st.button("🗑️ Clear", use_container_width=True):
                 st.session_state.cart = {}
                 st.rerun()
+
 # ==========================================
 # STAFF POS & ADMIN MANAGEMENT VIEW
 # ==========================================
@@ -1108,7 +1114,6 @@ else:
                                 index=1 if len(cols) > 1 else 0,
                             )
                         with c3:
-                            # Default to 3rd column if available, else offer fixed option
                             default_cat_idx = 3 if len(cols) > 2 else 0
                             col_cat = st.selectbox(
                                 "Category Column:",
@@ -1122,7 +1127,6 @@ else:
                                 index=3 if len(cols) > 3 else 0,
                             )
 
-                        # If user chooses to set a fixed category manually
                         fixed_cat_val = ""
                         if col_cat == "(Set Fixed Category)":
                             fixed_cat_val = st.text_input(
@@ -1146,7 +1150,6 @@ else:
                                     else ""
                                 )
 
-                                # Determine Category value
                                 if col_cat == "(Set Fixed Category)":
                                     cat_val = (
                                         fixed_cat_val.capitalize().strip()
@@ -1160,7 +1163,6 @@ else:
                                         else "General"
                                     )
 
-                                # Clean price string
                                 raw_price = (
                                     str(row[col_price])
                                     if pd.notna(row[col_price])
@@ -1219,6 +1221,7 @@ else:
                             st.session_state.editing_code = code
                             st.session_state.manage_action = "✏️ Edit / Update Item"
                             st.rerun()
+
     # --- TAB 5: SYSTEM CONFIGURATION, COMPANY & LOCATION SETTINGS ---
     with tab_settings:
         st.subheader("⚙️ System Configuration & General Settings")
