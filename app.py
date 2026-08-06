@@ -1001,7 +1001,7 @@ else:
                         st.success(f"Deleted item [{selected_code}]!")
                         st.rerun()
 
-        else:
+            else:
                 st.subheader("📥 Import Inventory from AutoCount")
                 st.caption(
                     "Upload AutoCount Excel or CSV file to bulk import/update items."
@@ -1093,8 +1093,6 @@ else:
 
                     except Exception as e:
                         st.error(f"Error reading AutoCount file: {e}")
-
-
 
         with col_list:
             st.subheader("Current Inventory Items")
