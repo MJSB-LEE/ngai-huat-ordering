@@ -646,7 +646,6 @@ filtered_menu = {}
                             ):
                                 st.session_state.cart[code] += 1
                                 st.rerun()
-
     st.write("---")
     st.markdown("### 🛒 Your Order Slip")
 
