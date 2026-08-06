@@ -83,23 +83,28 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
 
-    /* FORCE SIDE-BY-SIDE (LEFT / RIGHT) LAYOUT FOR BUTTONS ON MOBILE */
+    /* TARGET ONLY HORIZONTAL BUTTON COLUMNS & FORCE INLINE FLEX */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
         justify-content: space-between !important;
-        gap: 6px !important;
+        width: 100% !important;
     }
 
+    /* OVERRIDE MOBILE STACKING ON COLUMNS */
+    div[data-testid="stHorizontalBlock"] > div,
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        display: flex !important;
+        flex-direction: row !important;
         width: 33.33% !important;
         min-width: 0 !important;
         flex: 1 1 0% !important;
     }
 </style>
 """
+
 LIVE_SEARCH_JS = """
 <script>
     const doc = window.parent.document;
