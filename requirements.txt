@@ -5,3 +5,4 @@ pillow
 streamlit-sortables
 openpyxl
 libsql
+supabase
