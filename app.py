@@ -80,6 +80,18 @@ MOBILE_CSS = """
         font-size: 14px;
         margin-top: 4px;
     }
+
+    /* PREVENT COLUMNS FROM STACKING VERTICALLY ON MOBILE */
+    div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+    }
+    div[data-testid="column"] {
+        width: auto !important;
+        min-width: 0 !important;
+        flex: 1 1 0% !important;
+    }
 </style>
 """
 
