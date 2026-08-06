@@ -57,7 +57,7 @@ MOBILE_CSS = """
 
     .stButton button {
         border-radius: 10px !important;
-        min-height: 44px !important;
+        min-height: 40px !important;
         font-weight: bold !important;
     }
     
@@ -81,16 +81,10 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
 
-    /* PREVENT COLUMNS FROM STACKING VERTICALLY ON MOBILE */
+    /* Prevent horizontal columns from stacking vertically on mobile */
     div[data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        align-items: center !important;
-    }
-    div[data-testid="column"] {
-        width: auto !important;
-        min-width: 0 !important;
-        flex: 1 1 0% !important;
     }
 </style>
 """
@@ -557,17 +551,61 @@ if not st.session_state.is_admin:
         if matches_cat and matches_search:
             filtered_menu[code] = details
 
-    st.markdown("##### 📦 Item Catalog")
+st.markdown("##### 📦 Item Catalog")
     if not filtered_menu:
         st.warning("No items match your search or selected category.")
     else:
         for code, item in filtered_menu.items():
             with st.container(border=True):
-                col_img, col_detail = st.columns([1, 2.2])
-                with col_img:
-                    if item["image"]:
+                # Items WITH image: 2-column layout
+                if item.get("image"):
+                    col_img, col_detail = st.columns([1, 2.2])
+                    with col_img:
                         st.image(item["image"], use_container_width=True)
-                with col_detail:
+                    with col_detail:
+                        st.markdown(f"**[{code}] {item['name']}**")
+                        st.markdown(
+                            f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
+                            unsafe_allow_html=True,
+                        )
+
+                        curr_qty = st.session_state.cart.get(code, 0)
+                        if curr_qty == 0:
+                            if st.button(
+                                "➕ Add",
+                                key=f"hp_add_{code}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.cart[code] = 1
+                                st.rerun()
+                        else:
+                            q_c1, q_c2, q_c3 = st.columns([1, 1, 1])
+                            with q_c1:
+                                if st.button(
+                                    "➖",
+                                    key=f"hp_minus_{code}",
+                                    use_container_width=True,
+                                ):
+                                    st.session_state.cart[code] -= 1
+                                    if st.session_state.cart[code] <= 0:
+                                        del st.session_state.cart[code]
+                                    st.rerun()
+                            with q_c2:
+                                st.markdown(
+                                    f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
+                                    unsafe_allow_html=True,
+                                )
+                            with q_c3:
+                                if st.button(
+                                    "➕",
+                                    key=f"hp_plus_{code}",
+                                    use_container_width=True,
+                                ):
+                                    st.session_state.cart[code] += 1
+                                    st.rerun()
+
+                # Items WITHOUT image: Full-width layout
+                else:
                     st.markdown(f"**[{code}] {item['name']}**")
                     st.markdown(
                         f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
@@ -597,7 +635,7 @@ if not st.session_state.is_admin:
                                 st.rerun()
                         with q_c2:
                             st.markdown(
-                                f"<h4 style='text-align:center;margin:0;'>{curr_qty}</h4>",
+                                f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
                                 unsafe_allow_html=True,
                             )
                         with q_c3:
@@ -608,7 +646,7 @@ if not st.session_state.is_admin:
                             ):
                                 st.session_state.cart[code] += 1
                                 st.rerun()
-
+                                
     st.write("---")
     st.markdown("### 🛒 Your Order Slip")
     current_order_no, current_yymm, current_seq = get_next_order_number()
