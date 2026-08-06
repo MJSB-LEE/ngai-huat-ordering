@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from PIL import Image
+import libsql
 
 try:
     from streamlit_sortables import sort_items
@@ -87,23 +88,37 @@ LIVE_SEARCH_JS = """
 """
 
 # DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
-@st.cache_resource
-def get_db_connection():
+def run_query(query, params=(), fetchall=True):
     if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
         import libsql
-        return libsql.connect(
+
+        conn = libsql.connect(
             database=st.secrets["TURSO_DATABASE_URL"],
             auth_token=st.secrets["TURSO_AUTH_TOKEN"]
         )
     else:
         return sqlite3.connect("pos_inventory.db")
-        
-# 2. Query function (gets a fresh cursor from the cached connection)
-def run_query(query, params=()):
-    conn = get_db_connection()
-    cursor = conn.cursor()
+
+   cursor = conn.cursor()
     cursor.execute(query, params)
-    return cursor.fetchall()
+
+    if fetchall:
+        result = cursor.fetchall()
+    else:
+        conn.commit()
+        result = None
+
+    cursor.close()
+    conn.close()
+    return result
+
+# Cache read-only queries in RAM for 30 seconds
+@st.cache_data(ttl=30)
+def fetch_all_products():
+    return run_query(
+        "SELECT * FROM items"
+    )  # Change 'items' to your database table name
+
 
 def image_to_base64(uploaded_file):
     if uploaded_file is not None:
