@@ -88,18 +88,19 @@ LIVE_SEARCH_JS = """
 """
 
 # DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
+# DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
 def run_query(query, params=(), fetchall=True):
     if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
         import libsql
 
         conn = libsql.connect(
             database=st.secrets["TURSO_DATABASE_URL"],
-            auth_token=st.secrets["TURSO_AUTH_TOKEN"]
+            auth_token=st.secrets["TURSO_AUTH_TOKEN"],
         )
     else:
-        return sqlite3.connect("pos_inventory.db")
+        conn = sqlite3.connect("pos_inventory.db")
 
-   cursor = conn.cursor()
+    cursor = conn.cursor()
     cursor.execute(query, params)
 
     if fetchall:
@@ -111,7 +112,7 @@ def run_query(query, params=(), fetchall=True):
     cursor.close()
     conn.close()
     return result
-
+    
 # Cache read-only queries in RAM for 30 seconds
 @st.cache_data(ttl=30)
 def fetch_all_products():
