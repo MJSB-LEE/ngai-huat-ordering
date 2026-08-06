@@ -892,29 +892,39 @@ else:
                 st.error(f"Error reading file: {e}")
 
     # --- TAB 4: ADD / EDIT / MANAGE INVENTORY ---
-    # --- TAB 4: ADD / EDIT / MANAGE INVENTORY ---
     import re
 
     with tab_manage:
         current_menu = get_menu_items()
 
-        # Initialize manage_mode in session state if not set
-        if "manage_mode" not in st.session_state:
-            st.session_state.manage_mode = "➕ Add New Item"
+        # Track active action mode using a dedicated key
+        actions = [
+            "➕ Add New Item",
+            "✏️ Edit / Update Item",
+            "📥 Import from AutoCount",
+        ]
+
+        if "manage_action" not in st.session_state:
+            st.session_state.manage_action = "➕ Add New Item"
+
+        # Determine index for radio button
+        default_index = (
+            actions.index(st.session_state.manage_action)
+            if st.session_state.manage_action in actions
+            else 0
+        )
 
         col_forms, col_list = st.columns([2, 3])
 
         with col_forms:
             mode = st.radio(
                 "Action:",
-                [
-                    "➕ Add New Item",
-                    "✏️ Edit / Update Item",
-                    "📥 Import from AutoCount",
-                ],
-                key="manage_mode",
+                actions,
+                index=default_index,
                 horizontal=True,
             )
+            # Sync selection back to state
+            st.session_state.manage_action = mode
 
             if mode == "➕ Add New Item":
                 st.subheader("➕ Add New Item")
@@ -1086,7 +1096,7 @@ else:
                                     else "General"
                                 )
 
-                                # Clean price column string (removes "RM", spaces, commas)
+                                # Clean price string (strips "RM", spaces, commas)
                                 raw_price = str(row[col_price]) if pd.notna(row[col_price]) else "0.0"
                                 cleaned_price_str = re.sub(r"[^\d.]", "", raw_price)
                                 try:
@@ -1133,7 +1143,7 @@ else:
                             use_container_width=True,
                         ):
                             st.session_state.editing_code = code
-                            st.session_state.manage_mode = "✏️ Edit / Update Item"
+                            st.session_state.manage_action = "✏️ Edit / Update Item"
                             st.rerun()
     # --- TAB 5: SYSTEM CONFIGURATION, COMPANY & LOCATION SETTINGS ---
     with tab_settings:
