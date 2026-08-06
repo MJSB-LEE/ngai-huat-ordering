@@ -537,7 +537,7 @@ if not st.session_state.is_admin:
     )
     selected_category = st.radio("Category:", categories, horizontal=True)
 
-    filtered_menu = {}
+filtered_menu = {}
     for code, details in menu_data.items():
         matches_cat = (
             selected_category == "All"
@@ -551,7 +551,7 @@ if not st.session_state.is_admin:
         if matches_cat and matches_search:
             filtered_menu[code] = details
 
-st.markdown("##### 📦 Item Catalog")
+    st.markdown("##### 📦 Item Catalog")
     if not filtered_menu:
         st.warning("No items match your search or selected category.")
     else:
@@ -646,7 +646,10 @@ st.markdown("##### 📦 Item Catalog")
                             ):
                                 st.session_state.cart[code] += 1
                                 st.rerun()
-                                
+
+    st.write("---")
+    st.markdown("### 🛒 Your Order Slip")
+
     if not st.session_state.cart:
         st.info("Your cart is empty. Select items above to start ordering.")
     else:
@@ -702,7 +705,6 @@ st.markdown("##### 📦 Item Catalog")
             if st.button("🗑️ Clear", use_container_width=True):
                 st.session_state.cart = {}
                 st.rerun()
-
 # ==========================================
 # STAFF POS & ADMIN MANAGEMENT VIEW
 # ==========================================
