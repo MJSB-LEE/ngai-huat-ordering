@@ -1001,9 +1001,100 @@ else:
                         st.success(f"Deleted item [{selected_code}]!")
                         st.rerun()
 
-            else:
+        else:
                 st.subheader("📥 Import Inventory from AutoCount")
-                st.caption("Upload AutoCount Excel or CSV file.")
+                st.caption(
+                    "Upload AutoCount Excel or CSV file to bulk import/update items."
+                )
+
+                autocount_file = st.file_uploader(
+                    "Upload File",
+                    type=["xlsx", "csv"],
+                    key="autocount_import_uploader",
+                )
+
+                if autocount_file:
+                    try:
+                        df_ac = (
+                            pd.read_csv(autocount_file)
+                            if autocount_file.name.endswith(".csv")
+                            else pd.read_excel(autocount_file)
+                        )
+
+                        st.markdown("**Preview Uploaded File:**")
+                        st.dataframe(df_ac.head(5), use_container_width=True)
+
+                        cols = df_ac.columns.tolist()
+                        c1, c2, c3, c4 = st.columns(4)
+
+                        with c1:
+                            col_code = st.selectbox(
+                                "Item Code Column:", cols, index=0
+                            )
+                        with c2:
+                            col_name = st.selectbox(
+                                "Item Name Column:",
+                                cols,
+                                index=1 if len(cols) > 1 else 0,
+                            )
+                        with c3:
+                            col_cat = st.selectbox(
+                                "Category Column:",
+                                cols,
+                                index=2 if len(cols) > 2 else 0,
+                            )
+                        with c4:
+                            col_price = st.selectbox(
+                                "Price Column:",
+                                cols,
+                                index=3 if len(cols) > 3 else 0,
+                            )
+
+                        if st.button(
+                            "🚀 Start Import to Supabase", type="primary"
+                        ):
+                            imported_count = 0
+                            for _, row in df_ac.iterrows():
+                                code_val = (
+                                    str(row[col_code]).upper().strip()
+                                    if pd.notna(row[col_code])
+                                    else ""
+                                )
+                                name_val = (
+                                    str(row[col_name]).strip()
+                                    if pd.notna(row[col_name])
+                                    else ""
+                                )
+                                cat_val = (
+                                    str(row[col_cat]).capitalize().strip()
+                                    if pd.notna(row[col_cat])
+                                    else "General"
+                                )
+
+                                try:
+                                    price_val = float(row[col_price])
+                                except (ValueError, TypeError):
+                                    price_val = 0.0
+
+                                if code_val and name_val:
+                                    add_or_update_menu_item(
+                                        code_val,
+                                        name_val,
+                                        cat_val,
+                                        price_val,
+                                        None,
+                                    )
+                                    imported_count += 1
+
+                            st.success(
+                                f"🎉 Successfully imported {imported_count} items into Supabase!"
+                            )
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Error reading AutoCount file: {e}")
+
+
 
         with col_list:
             st.subheader("Current Inventory Items")
