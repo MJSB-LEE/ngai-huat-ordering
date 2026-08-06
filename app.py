@@ -88,18 +88,19 @@ LIVE_SEARCH_JS = """
 """
 
 # DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
-# DATABASE CONNECTION HELPER (TURSO CLOUD OR LOCAL SQLITE)
-def run_query(query, params=(), fetchall=True):
+def get_db_connection():
     if "TURSO_DATABASE_URL" in st.secrets and "TURSO_AUTH_TOKEN" in st.secrets:
-        import libsql
-
-        conn = libsql.connect(
+        return libsql.connect(
             database=st.secrets["TURSO_DATABASE_URL"],
             auth_token=st.secrets["TURSO_AUTH_TOKEN"],
         )
     else:
-        conn = sqlite3.connect("pos_inventory.db")
+        return sqlite3.connect("pos_inventory.db")
 
+
+# 2. Safe query execution helper (opens, executes, commits, and closes cleanly)
+def run_query(query, params=(), fetchall=True):
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(query, params)
 
