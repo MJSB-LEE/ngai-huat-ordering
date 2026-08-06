@@ -369,24 +369,21 @@ def get_orders_by_status(status, month_filter=None):
         ))
     return rows
 
-
 def get_available_order_months():
-    response = (
-        supabase.table("orders")
-        .select("created_at")
-        .not_.is_("created_at", "null")
-        .execute()
-    )
-    months = sorted(
-        list(
-            set(
-                o["created_at"][:7]
-                for o in response.data
-                if o.get("created_at") and len(o["created_at"]) >= 7
-            )
-        ),
-        reverse=True,
-    )
+    try:
+        response = supabase.table("orders").select("created_at").execute()
+        months = sorted(
+            list(
+                set(
+                    o["created_at"][:7]
+                    for o in response.data
+                    if o.get("created_at") and len(o["created_at"]) >= 7
+                )
+            ),
+            reverse=True,
+        )
+    except Exception:
+        months = []
 
     current_m = datetime.now().strftime("%Y-%m")
     if current_m not in months:
