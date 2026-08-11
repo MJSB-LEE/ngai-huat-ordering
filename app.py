@@ -3,7 +3,9 @@ from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import io
+import json
 import os
+import re
 import smtplib
 import urllib.parse
 from PIL import Image
@@ -83,7 +85,7 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
 
-    /* TARGET ONLY HORIZONTAL BUTTON COLUMNS & FORCE INLINE FLEX */
+    /* FORCE HORIZONTAL FLEX LAYOUT FOR + / QUANTITY / - BUTTONS ON MOBILE */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -93,7 +95,6 @@ MOBILE_CSS = """
         width: 100% !important;
     }
 
-    /* OVERRIDE MOBILE STACKING ON COLUMNS */
     div[data-testid="stHorizontalBlock"] > div,
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         display: flex !important;
@@ -518,11 +519,18 @@ if not st.session_state.is_admin:
     menu_data = get_menu_items()
     active_locations = get_locations()
 
-    display_location = (
-        active_branch_setting
-        if active_branch_setting in active_locations
-        else (active_locations[0] if active_locations else "MAIN BRANCH")
-    )
+    # Dynamic URL Shop parameter detection (e.g. ?shop=TUNGKU)
+    url_shop = query_params.get("shop", "").strip().upper()
+    if url_shop and url_shop in [loc.upper() for loc in active_locations]:
+        display_location = next(
+            loc for loc in active_locations if loc.upper() == url_shop
+        )
+    else:
+        display_location = (
+            active_branch_setting
+            if active_branch_setting in active_locations
+            else (active_locations[0] if active_locations else "MAIN BRANCH")
+        )
 
     st.markdown(
         f"""
@@ -699,7 +707,6 @@ if not st.session_state.is_admin:
                 if not client_name.strip():
                     st.error("⚠️ Please fill in Customer Name!")
                 else:
-                    # Generate next order sequence and YYMM number
                     current_order_no, current_yymm, current_seq = (
                         get_next_order_number()
                     )
@@ -961,12 +968,9 @@ else:
                 st.error(f"Error reading file: {e}")
 
     # --- TAB 4: ADD / EDIT / MANAGE INVENTORY ---
-    import re
-
     with tab_manage:
         current_menu = get_menu_items()
 
-        # Track active action mode using a dedicated key
         actions = [
             "➕ Add New Item",
             "✏️ Edit / Update Item",
@@ -1283,6 +1287,20 @@ else:
 
         st.write("---")
 
+        with st.container(border=True):
+            st.markdown("### 🔗 Shareable Branch Links")
+            st.caption(
+                "Copy and send these exact links to customers or turn them into QR codes:"
+            )
+
+            base_app_url = "https://t-ordering.streamlit.app"
+            for loc in get_locations():
+                encoded_loc = urllib.parse.quote(loc)
+                branch_link = f"{base_app_url}/?shop={encoded_loc}"
+                st.code(branch_link, language="text")
+
+        st.write("---")
+
         col_users, col_locs = st.columns(2)
 
         # Cashiers & Email Credentials Management
@@ -1292,8 +1310,7 @@ else:
 
                 with st.form("add_cashier_form", clear_on_submit=True):
                     st.caption(
-                        "Add cashier with sending Gmail account & App"
-                        " Password:"
+                        "Add cashier with sending Gmail account & App Password:"
                     )
                     new_c_name = st.text_input("Cashier Name *").upper().strip()
                     new_c_email = st.text_input("Gmail Address")
