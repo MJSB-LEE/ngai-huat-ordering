@@ -177,17 +177,15 @@ def save_setting(key, value):
 
 # --- CASHIER & USER MANAGEMENT ---
 def authenticate_user(username, password):
-    """Authenticates staff users against Supabase cashiers table or master pin."""
     username_clean = username.upper().strip()
 
-    # Master Admin Override
     if username.lower().strip() == "admin" and password.strip() == "1234":
         return {"name": "ADMIN", "role": "admin"}
 
     try:
         response = (
             supabase.table("cashiers")
-            .select("name, password, role")
+            .select("*")
             .eq("name", username_clean)
             .execute()
         )
@@ -197,7 +195,7 @@ def authenticate_user(username, password):
             if stored_pass == password.strip():
                 return {
                     "name": row["name"],
-                    "role": (row.get("role") or "cashier").lower(),
+                    "role": str(row.get("role") or "cashier").lower(),
                 }
     except Exception:
         pass
@@ -206,32 +204,38 @@ def authenticate_user(username, password):
 
 @st.cache_data(ttl=10)
 def get_cashiers():
-    response = (
-        supabase.table("cashiers")
-        .select("name")
-        .order("sort_order", desc=False)
-        .order("name", desc=False)
-        .execute()
-    )
-    rows = [r["name"] for r in response.data] if response.data else []
-    return rows if rows else ["DEFAULT CASHIER"]
+    try:
+        response = (
+            supabase.table("cashiers")
+            .select("name")
+            .order("sort_order", desc=False)
+            .order("name", desc=False)
+            .execute()
+        )
+        rows = [r["name"] for r in response.data] if response.data else []
+        return rows if rows else ["DEFAULT CASHIER"]
+    except Exception:
+        return ["DEFAULT CASHIER"]
 
 
 def get_cashier_details(name):
-    response = (
-        supabase.table("cashiers")
-        .select("password, role, email, smtp_password")
-        .eq("name", name)
-        .execute()
-    )
-    if response.data:
-        row = response.data[0]
-        return (
-            row.get("password", ""),
-            row.get("role", "cashier"),
-            row.get("email", ""),
-            row.get("smtp_password", ""),
+    try:
+        response = (
+            supabase.table("cashiers")
+            .select("*")
+            .eq("name", name)
+            .execute()
         )
+        if response.data:
+            row = response.data[0]
+            return (
+                row.get("password", ""),
+                row.get("role", "cashier"),
+                row.get("email", ""),
+                row.get("smtp_password", ""),
+            )
+    except Exception:
+        pass
     return "", "cashier", "", ""
 
 
@@ -246,14 +250,18 @@ def save_cashiers_order(ordered_names):
 def add_cashier(
     name, password="", role="cashier", email="", smtp_password=""
 ):
-    response = (
-        supabase.table("cashiers")
-        .select("sort_order")
-        .order("sort_order", desc=True)
-        .limit(1)
-        .execute()
-    )
-    max_order = response.data[0]["sort_order"] if response.data else 0
+    try:
+        response = (
+            supabase.table("cashiers")
+            .select("sort_order")
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        max_order = response.data[0]["sort_order"] if response.data else 0
+    except Exception:
+        max_order = 0
+
     supabase.table("cashiers").upsert({
         "name": name.upper().strip(),
         "password": password.strip(),
@@ -268,13 +276,16 @@ def add_cashier(
 def update_cashier_details(
     old_name, new_name, password, role, email, smtp_password
 ):
-    response = (
-        supabase.table("cashiers")
-        .select("sort_order")
-        .eq("name", old_name)
-        .execute()
-    )
-    old_order = response.data[0]["sort_order"] if response.data else 1
+    try:
+        response = (
+            supabase.table("cashiers")
+            .select("sort_order")
+            .eq("name", old_name)
+            .execute()
+        )
+        old_order = response.data[0]["sort_order"] if response.data else 1
+    except Exception:
+        old_order = 1
 
     if old_name != new_name.upper().strip():
         supabase.table("cashiers").delete().eq("name", old_name).execute()
@@ -298,15 +309,18 @@ def delete_cashier(name):
 # --- LOCATION MANAGEMENT ---
 @st.cache_data(ttl=10)
 def get_locations():
-    response = (
-        supabase.table("locations")
-        .select("name")
-        .order("sort_order", desc=False)
-        .order("name", desc=False)
-        .execute()
-    )
-    rows = [r["name"] for r in response.data] if response.data else []
-    return rows if rows else ["MAIN BRANCH"]
+    try:
+        response = (
+            supabase.table("locations")
+            .select("name")
+            .order("sort_order", desc=False)
+            .order("name", desc=False)
+            .execute()
+        )
+        rows = [r["name"] for r in response.data] if response.data else []
+        return rows if rows else ["MAIN BRANCH"]
+    except Exception:
+        return ["MAIN BRANCH"]
 
 
 def save_locations_order(ordered_names):
@@ -318,14 +332,18 @@ def save_locations_order(ordered_names):
 
 
 def add_location(name):
-    response = (
-        supabase.table("locations")
-        .select("sort_order")
-        .order("sort_order", desc=True)
-        .limit(1)
-        .execute()
-    )
-    max_order = response.data[0]["sort_order"] if response.data else 0
+    try:
+        response = (
+            supabase.table("locations")
+            .select("sort_order")
+            .order("sort_order", desc=True)
+            .limit(1)
+            .execute()
+        )
+        max_order = response.data[0]["sort_order"] if response.data else 0
+    except Exception:
+        max_order = 0
+
     supabase.table("locations").upsert(
         {"name": name.upper().strip(), "sort_order": max_order + 1}
     ).execute()
@@ -333,13 +351,17 @@ def add_location(name):
 
 
 def update_location_name(old_name, new_name):
-    response = (
-        supabase.table("locations")
-        .select("sort_order")
-        .eq("name", old_name)
-        .execute()
-    )
-    old_order = response.data[0]["sort_order"] if response.data else 1
+    try:
+        response = (
+            supabase.table("locations")
+            .select("sort_order")
+            .eq("name", old_name)
+            .execute()
+        )
+        old_order = response.data[0]["sort_order"] if response.data else 1
+    except Exception:
+        old_order = 1
+
     supabase.table("locations").delete().eq("name", old_name).execute()
     supabase.table("locations").upsert(
         {"name": new_name.upper().strip(), "sort_order": old_order}
@@ -355,16 +377,18 @@ def delete_location(name):
 # --- ORDER NUMBERS & SAVING ---
 def get_next_order_number():
     current_yymm = datetime.now().strftime("%y%m")
-    response = (
-        supabase.table("order_counter")
-        .select("last_seq")
-        .eq("yymm", current_yymm)
-        .execute()
-    )
-
-    if response.data:
-        next_seq = response.data[0]["last_seq"] + 1
-    else:
+    try:
+        response = (
+            supabase.table("order_counter")
+            .select("last_seq")
+            .eq("yymm", current_yymm)
+            .execute()
+        )
+        if response.data:
+            next_seq = response.data[0]["last_seq"] + 1
+        else:
+            next_seq = 1
+    except Exception:
         next_seq = 1
 
     order_num = f"{current_yymm}-{next_seq:04d}"
@@ -527,37 +551,42 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = "client"
 
 query_params = st.query_params
+
+# Admin override parameter check
 if query_params.get("admin", "false").lower() == "true":
     st.session_state.authenticated_user = "ADMIN"
     st.session_state.user_role = "admin"
 
-# Sidebar Authentication Box
-st.sidebar.markdown("### 🔑 Staff Portal Login")
+# SHOW STAFF LOGIN SIDEBAR ONLY WHEN NOT BROWSING VIA CUSTOMER BRANCH LINK
+is_customer_link = bool(query_params.get("shop"))
 
-if st.session_state.authenticated_user is None:
-    with st.sidebar.form("sidebar_login_form"):
-        login_user = st.text_input("Username / Cashier Name", placeholder="e.g. admin or CASHIER1")
-        login_pass = st.text_input("Password", type="password", placeholder="••••••••")
-        submit_login = st.form_submit_button("🔓 Log In", use_container_width=True)
+if not is_customer_link:
+    st.sidebar.markdown("### 🔑 Staff Portal Login")
 
-        if submit_login:
-            user_info = authenticate_user(login_user, login_pass)
-            if user_info:
-                st.session_state.authenticated_user = user_info["name"]
-                st.session_state.user_role = user_info["role"]
-                st.success(f"Welcome, {user_info['name']}!")
-                st.rerun()
-            else:
-                st.error("Invalid Username or Password!")
-else:
-    st.sidebar.success(
-        f"👤 **{st.session_state.authenticated_user}**\n\nRole: `{st.session_state.user_role.upper()}`"
-    )
-    if st.sidebar.button("🔒 Log Out", use_container_width=True):
-        st.session_state.authenticated_user = None
-        st.session_state.user_role = "client"
-        st.query_params.clear()
-        st.rerun()
+    if st.session_state.authenticated_user is None:
+        with st.sidebar.form("sidebar_login_form"):
+            login_user = st.text_input("Username / Cashier Name", placeholder="e.g. admin or CASHIER1")
+            login_pass = st.text_input("Password", type="password", placeholder="••••••••")
+            submit_login = st.form_submit_button("🔓 Log In", use_container_width=True)
+
+            if submit_login:
+                user_info = authenticate_user(login_user, login_pass)
+                if user_info:
+                    st.session_state.authenticated_user = user_info["name"]
+                    st.session_state.user_role = user_info["role"]
+                    st.success(f"Welcome, {user_info['name']}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid Username or Password!")
+    else:
+        st.sidebar.success(
+            f"👤 **{st.session_state.authenticated_user}**\n\nRole: `{st.session_state.user_role.upper()}`"
+        )
+        if st.sidebar.button("🔒 Log Out", use_container_width=True):
+            st.session_state.authenticated_user = None
+            st.session_state.user_role = "client"
+            st.query_params.clear()
+            st.rerun()
 
 # Load Global Settings
 company_name_setting = get_setting("company_name", "SYARIKAT NGAI HUAT SDN BHD")
