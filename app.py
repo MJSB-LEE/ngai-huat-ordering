@@ -46,7 +46,7 @@ MOBILE_CSS = """
     
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 5rem !important;
+        padding-bottom: 6rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         max-width: 100% !important;
@@ -85,7 +85,7 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
 
-    /* FORCE HORIZONTAL FLEX LAYOUT FOR + / QUANTITY / - BUTTONS ON MOBILE */
+    /* Horizontal layout for + / quantity / - buttons */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -538,6 +538,90 @@ def update_order_status(order_no, status, cancel_reason=""):
 
 
 # ==========================================
+# SHOPEE-STYLE TROLLEY DIALOG (MODAL OVERLAY)
+# ==========================================
+@st.dialog("🛒 Your Shopping Trolley")
+def show_trolley_modal(menu_data, display_location):
+    if not isinstance(st.session_state.cart, dict) or not st.session_state.cart:
+        st.info("Your trolley is empty. Select items from the catalog.")
+        return
+
+    total_amount = 0.0
+    items_summary_list = []
+
+    st.markdown("##### 📝 Review Selected Items")
+    for code, qty in list(st.session_state.cart.items()):
+        if code in menu_data:
+            item = menu_data[code]
+            subtotal = item["price"] * qty
+            total_amount += subtotal
+            items_summary_list.append(f"[{code}] {item['name']} x{qty}")
+
+            with st.container(border=True):
+                c_info, c_qty = st.columns([2.2, 1])
+                with c_info:
+                    st.write(f"**{item['name']}**")
+                    st.caption(f"RM {item['price']:.2f} × {qty} = **RM {subtotal:.2f}**")
+                with c_qty:
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.button("➖", key=f"dialog_m_{code}", use_container_width=True):
+                            st.session_state.cart[code] -= 1
+                            if st.session_state.cart[code] <= 0:
+                                del st.session_state.cart[code]
+                            st.rerun()
+                    with b2:
+                        if st.button("➕", key=f"dialog_p_{code}", use_container_width=True):
+                            st.session_state.cart[code] += 1
+                            st.rerun()
+
+    st.write("---")
+    st.markdown(f"### **Total Amount: RM {total_amount:.2f}**")
+
+    client_name = st.text_input("Customer Name *", placeholder="e.g. Mr. Tan")
+    customer_comment = st.text_area(
+        "Remarks / Notes (Optional)", placeholder="e.g. Packing requests..."
+    )
+
+    col_sub, col_clr = st.columns([3, 1])
+    with col_sub:
+        if st.button(
+            "🚀 Confirm & Submit Order",
+            type="primary",
+            use_container_width=True,
+        ):
+            if not client_name.strip():
+                st.error("⚠️ Please fill in Customer Name!")
+            else:
+                items_summary_str = ", ".join(items_summary_list)
+                current_order_no, current_yymm, current_seq = (
+                    get_next_order_number()
+                )
+
+                save_new_order(
+                    current_order_no,
+                    client_name.strip(),
+                    display_location,
+                    "CLIENT MOBILE",
+                    items_summary_str,
+                    total_amount,
+                    current_yymm,
+                    current_seq,
+                )
+
+                st.session_state.cart = {}
+                st.balloons()
+                st.success(
+                    f"🎉 Order `{current_order_no}` placed successfully!"
+                )
+                st.rerun()
+    with col_clr:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.cart = {}
+            st.rerun()
+
+
+# ==========================================
 # APP SESSION STATE & AUTHENTICATION ROUTING
 # ==========================================
 if "cart" not in st.session_state or not isinstance(st.session_state.cart, dict):
@@ -557,7 +641,7 @@ if query_params.get("admin", "false").lower() == "true":
     st.session_state.authenticated_user = "ADMIN"
     st.session_state.user_role = "admin"
 
-# SHOW STAFF LOGIN SIDEBAR ONLY WHEN NOT BROWSING VIA CUSTOMER BRANCH LINK
+# Hide sidebar staff login when customer uses a direct shop branch link
 is_customer_link = bool(query_params.get("shop"))
 
 if not is_customer_link:
@@ -625,11 +709,6 @@ if st.session_state.user_role == "client":
     """,
         unsafe_allow_html=True,
     )
-
-    with st.container(border=True):
-        client_name = st.text_input(
-            "Customer Name *", key="hp_cust_name", placeholder="e.g. Mr. Tan"
-        )
 
     st.markdown("##### 🔎 Search & Filter Items")
     search_query = st.text_input(
@@ -751,71 +830,23 @@ if st.session_state.user_role == "client":
                                 st.session_state.cart[code] += 1
                                 st.rerun()
 
+    # --- FLOATING TROLLEY SUMMARY BAR ---
     st.write("---")
-    st.markdown("### 🛒 Your Order Slip")
+    total_qty = sum(st.session_state.cart.values()) if isinstance(st.session_state.cart, dict) else 0
+    total_amt = sum(
+        menu_data[code]["price"] * qty 
+        for code, qty in st.session_state.cart.items() 
+        if code in menu_data
+    ) if isinstance(st.session_state.cart, dict) else 0.0
 
-    if not isinstance(st.session_state.cart, dict):
-        st.session_state.cart = {}
-
-    if not st.session_state.cart:
-        st.info("Your cart is empty. Select items above to start ordering.")
-    else:
-        total_amount = 0.0
-        items_str_list = []
-
-        for code, qty in list(st.session_state.cart.items()):
-            if code in menu_data:
-                item = menu_data[code]
-                subtotal = item["price"] * qty
-                total_amount += subtotal
-                items_str_list.append(f"[{code}] {item['name']} x{qty}")
-
-                st.write(
-                    f"• **{item['name']}** x{qty} = **RM {subtotal:.2f}**"
-                )
-
-        st.markdown(f"### **Total Amount: RM {total_amount:.2f}**")
-        customer_comment = st.text_area(
-            "Remarks / Notes (Optional)", placeholder="e.g. Packing requests..."
-        )
-
-        items_summary_str = ", ".join(items_str_list)
-
-        col_sub, col_rst = st.columns([3, 1])
-        with col_sub:
-            if st.button(
-                "🚀 Confirm & Submit Order",
-                type="primary",
-                use_container_width=True,
-            ):
-                if not client_name.strip():
-                    st.error("⚠️ Please fill in Customer Name!")
-                else:
-                    current_order_no, current_yymm, current_seq = (
-                        get_next_order_number()
-                    )
-
-                    save_new_order(
-                        current_order_no,
-                        client_name.strip(),
-                        display_location,
-                        "CLIENT MOBILE",
-                        items_summary_str,
-                        total_amount,
-                        current_yymm,
-                        current_seq,
-                    )
-
-                    st.balloons()
-                    st.success(
-                        f"🎉 Order `{current_order_no}` placed successfully!"
-                    )
-                    st.session_state.cart = {}
-                    st.rerun()
-        with col_rst:
-            if st.button("🗑️ Clear", use_container_width=True):
-                st.session_state.cart = {}
-                st.rerun()
+    if total_qty > 0:
+        with st.container(border=True):
+            col_bar_info, col_bar_btn = st.columns([2, 1])
+            with col_bar_info:
+                st.markdown(f"### 🛒 **{total_qty} Items** | **RM {total_amt:.2f}**")
+            with col_bar_btn:
+                if st.button("View Trolley 🛍️", type="primary", use_container_width=True):
+                    show_trolley_modal(menu_data, display_location)
 
 # ==========================================
 # 2. CASHIER VIEW (LOCKED TO POS & ORDERS)
@@ -1467,7 +1498,7 @@ elif st.session_state.user_role == "admin":
                 "Copy and send these exact links to customers or turn them into QR codes:"
             )
 
-            base_app_url = "https://ngai-huat-ordering.streamlit.app"
+            base_app_url = "https://t-ordering.streamlit.app"
             for loc in get_locations():
                 encoded_loc = urllib.parse.quote(loc)
                 branch_link = f"{base_app_url}/?shop={encoded_loc}"
