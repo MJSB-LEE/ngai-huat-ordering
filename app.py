@@ -741,97 +741,65 @@ if st.session_state.user_role == "client":
     if not filtered_menu:
         st.warning("No items match your search or selected category.")
     else:
-        for code, item in filtered_menu.items():
-            with st.container(border=True):
-                if item.get("image"):
-                    col_img, col_detail = st.columns([1, 2.2])
-                    with col_img:
-                        st.image(item["image"], use_container_width=True)
-                    with col_detail:
-                        st.markdown(f"**[{code}] {item['name']}**")
-                        st.markdown(
-                            f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
-                            unsafe_allow_html=True,
-                        )
-
-                        curr_qty = st.session_state.cart.get(code, 0)
-                        if curr_qty == 0:
-                            if st.button(
-                                "➕ Add",
-                                key=f"hp_add_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] = 1
-                                st.rerun()
-                        else:
-                            q_c1, q_c2, q_c3 = st.columns([1, 1, 1])
-                            with q_c1:
-                                if st.button(
-                                    "➖",
-                                    key=f"hp_minus_{code}",
-                                    use_container_width=True,
-                                ):
-                                    st.session_state.cart[code] -= 1
-                                    if st.session_state.cart[code] <= 0:
-                                        del st.session_state.cart[code]
-                                    st.rerun()
-                            with q_c2:
-                                st.markdown(
-                                    f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
-                                    unsafe_allow_html=True,
-                                )
-                            with q_c3:
-                                if st.button(
-                                    "➕",
-                                    key=f"hp_plus_{code}",
-                                    use_container_width=True,
-                                ):
-                                    st.session_state.cart[code] += 1
-                                    st.rerun()
-                else:
-                    st.markdown(f"**[{code}] {item['name']}**")
-                    st.markdown(
-                        f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
-                        unsafe_allow_html=True,
-                    )
-
-                    curr_qty = st.session_state.cart.get(code, 0)
-                    if curr_qty == 0:
-                        if st.button(
-                            "➕ Add",
-                            key=f"hp_add_{code}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.cart[code] = 1
-                            st.rerun()
-                    else:
-                        q_c1, q_c2, q_c3 = st.columns([1, 1, 1])
-                        with q_c1:
-                            if st.button(
-                                "➖",
-                                key=f"hp_minus_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] -= 1
-                                if st.session_state.cart[code] <= 0:
-                                    del st.session_state.cart[code]
-                                st.rerun()
-                        with q_c2:
+        # BATCHING FORM: Adjust quantities freely without page reloads
+        with st.form("catalog_batch_form"):
+            temp_quantities = {}
+            for code, item in filtered_menu.items():
+                with st.container(border=True):
+                    if item.get("image"):
+                        col_img, col_detail, col_qty = st.columns([1, 1.8, 1])
+                        with col_img:
+                            st.image(item["image"], use_container_width=True)
+                        with col_detail:
+                            st.markdown(f"**[{code}] {item['name']}**")
                             st.markdown(
-                                f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
+                                f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
                                 unsafe_allow_html=True,
                             )
-                        with q_c3:
-                            if st.button(
-                                "➕",
-                                key=f"hp_plus_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] += 1
-                                st.rerun()
+                        with col_qty:
+                            default_val = st.session_state.cart.get(code, 0)
+                            temp_quantities[code] = st.number_input(
+                                "Qty",
+                                min_value=0,
+                                max_value=99,
+                                value=default_val,
+                                key=f"batch_qty_{code}",
+                            )
+                    else:
+                        col_detail, col_qty = st.columns([2.5, 1])
+                        with col_detail:
+                            st.markdown(f"**[{code}] {item['name']}**")
+                            st.markdown(
+                                f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
+                                unsafe_allow_html=True,
+                            )
+                        with col_qty:
+                            default_val = st.session_state.cart.get(code, 0)
+                            temp_quantities[code] = st.number_input(
+                                "Qty",
+                                min_value=0,
+                                max_value=99,
+                                value=default_val,
+                                key=f"batch_qty_{code}",
+                            )
 
-    # --- FLOATING TROLLEY SUMMARY BAR ---
-    st.write("---")
+            st.write("---")
+            submit_to_trolley = st.form_submit_button(
+                "🛒 Sync to Trolley & Review Order",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submit_to_trolley:
+            for code, qty in temp_quantities.items():
+                if qty > 0:
+                    st.session_state.cart[code] = qty
+                elif code in st.session_state.cart:
+                    del st.session_state.cart[code]
+
+            show_trolley_modal(menu_data, display_location)
+
+    # FLOATING QUICK SUMMARY BAR FOR ALREADY SYNCED CART
     total_qty = sum(st.session_state.cart.values()) if isinstance(st.session_state.cart, dict) else 0
     total_amt = sum(
         menu_data[code]["price"] * qty 
@@ -840,12 +808,13 @@ if st.session_state.user_role == "client":
     ) if isinstance(st.session_state.cart, dict) else 0.0
 
     if total_qty > 0:
+        st.write("---")
         with st.container(border=True):
             col_bar_info, col_bar_btn = st.columns([2, 1])
             with col_bar_info:
                 st.markdown(f"### 🛒 **{total_qty} Items** | **RM {total_amt:.2f}**")
             with col_bar_btn:
-                if st.button("View Trolley 🛍️", type="primary", use_container_width=True):
+                if st.button("Open Trolley 🛍️", type="primary", use_container_width=True):
                     show_trolley_modal(menu_data, display_location)
 
 # ==========================================
