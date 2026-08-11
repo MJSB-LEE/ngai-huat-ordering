@@ -474,6 +474,8 @@ def update_order_status(order_no, status, cancel_reason=""):
 def render_instant_catalog(menu_data, current_cart):
     """Renders catalog using local JavaScript for 0ms button clicks."""
     menu_json = json.dumps(menu_data)
+    if not isinstance(current_cart, dict):
+        current_cart = {}
     cart_json = json.dumps(current_cart)
 
     html_code = f"""
@@ -531,10 +533,8 @@ def render_instant_catalog(menu_data, current_cart):
             }} else {{
                 cart[code] = updated;
             }}
-            // 0ms instant UI update on phone screen
             render();
-            // Send updated cart object back to Streamlit
-            window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: cart }}, '*');
+            window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: JSON.stringify(cart) }}, '*');
         }}
 
         render();
@@ -546,7 +546,7 @@ def render_instant_catalog(menu_data, current_cart):
 # ==========================================
 # APP SESSION STATE & CONTROLS
 # ==========================================
-if "cart" not in st.session_state:
+if "cart" not in st.session_state or not isinstance(st.session_state.cart, dict):
     st.session_state.cart = {}
 if "editing_code" not in st.session_state:
     st.session_state.editing_code = None
@@ -652,13 +652,21 @@ if not st.session_state.is_admin:
     if not filtered_menu:
         st.warning("No items match your search or selected category.")
     else:
-        # Zero-delay client-side JS catalog update
-        js_cart = render_instant_catalog(filtered_menu, st.session_state.cart)
-        if js_cart is not None:
-            st.session_state.cart = js_cart
+        raw_js_cart = render_instant_catalog(filtered_menu, st.session_state.cart)
+        if raw_js_cart is not None:
+            if isinstance(raw_js_cart, str):
+                try:
+                    st.session_state.cart = json.loads(raw_js_cart)
+                except Exception:
+                    pass
+            elif isinstance(raw_js_cart, dict):
+                st.session_state.cart = raw_js_cart
 
     st.write("---")
     st.markdown("### 🛒 Your Order Slip")
+
+    if not isinstance(st.session_state.cart, dict):
+        st.session_state.cart = {}
 
     if not st.session_state.cart:
         st.info("Your cart is empty. Select items above to start ordering.")
