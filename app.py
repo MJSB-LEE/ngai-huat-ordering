@@ -175,7 +175,35 @@ def save_setting(key, value):
     ).execute()
 
 
-# --- CASHIER MANAGEMENT ---
+# --- CASHIER & USER MANAGEMENT ---
+def authenticate_user(username, password):
+    """Authenticates staff users against Supabase cashiers table or master pin."""
+    username_clean = username.upper().strip()
+
+    # Master Admin Override
+    if username.lower().strip() == "admin" and password.strip() == "1234":
+        return {"name": "ADMIN", "role": "admin"}
+
+    try:
+        response = (
+            supabase.table("cashiers")
+            .select("name, password, role")
+            .eq("name", username_clean)
+            .execute()
+        )
+        if response.data:
+            row = response.data[0]
+            stored_pass = str(row.get("password") or "")
+            if stored_pass == password.strip():
+                return {
+                    "name": row["name"],
+                    "role": (row.get("role") or "cashier").lower(),
+                }
+    except Exception:
+        pass
+    return None
+
+
 @st.cache_data(ttl=10)
 def get_cashiers():
     response = (
@@ -192,14 +220,19 @@ def get_cashiers():
 def get_cashier_details(name):
     response = (
         supabase.table("cashiers")
-        .select("email, smtp_password")
+        .select("password, role, email, smtp_password")
         .eq("name", name)
         .execute()
     )
     if response.data:
         row = response.data[0]
-        return row.get("email", ""), row.get("smtp_password", "")
-    return "", ""
+        return (
+            row.get("password", ""),
+            row.get("role", "cashier"),
+            row.get("email", ""),
+            row.get("smtp_password", ""),
+        )
+    return "", "cashier", "", ""
 
 
 def save_cashiers_order(ordered_names):
@@ -210,7 +243,9 @@ def save_cashiers_order(ordered_names):
     st.cache_data.clear()
 
 
-def add_cashier(name, email="", smtp_password=""):
+def add_cashier(
+    name, password="", role="cashier", email="", smtp_password=""
+):
     response = (
         supabase.table("cashiers")
         .select("sort_order")
@@ -221,6 +256,8 @@ def add_cashier(name, email="", smtp_password=""):
     max_order = response.data[0]["sort_order"] if response.data else 0
     supabase.table("cashiers").upsert({
         "name": name.upper().strip(),
+        "password": password.strip(),
+        "role": role.lower().strip(),
         "sort_order": max_order + 1,
         "email": email.strip(),
         "smtp_password": smtp_password.strip(),
@@ -228,7 +265,9 @@ def add_cashier(name, email="", smtp_password=""):
     st.cache_data.clear()
 
 
-def update_cashier_details(old_name, new_name, email, smtp_password):
+def update_cashier_details(
+    old_name, new_name, password, role, email, smtp_password
+):
     response = (
         supabase.table("cashiers")
         .select("sort_order")
@@ -236,9 +275,14 @@ def update_cashier_details(old_name, new_name, email, smtp_password):
         .execute()
     )
     old_order = response.data[0]["sort_order"] if response.data else 1
-    supabase.table("cashiers").delete().eq("name", old_name).execute()
+
+    if old_name != new_name.upper().strip():
+        supabase.table("cashiers").delete().eq("name", old_name).execute()
+
     supabase.table("cashiers").upsert({
         "name": new_name.upper().strip(),
+        "password": password.strip(),
+        "role": role.lower().strip(),
         "sort_order": old_order,
         "email": email.strip(),
         "smtp_password": smtp_password.strip(),
@@ -470,49 +514,60 @@ def update_order_status(order_no, status, cancel_reason=""):
 
 
 # ==========================================
-# APP SESSION STATE & CONTROLS
+# APP SESSION STATE & AUTHENTICATION ROUTING
 # ==========================================
 if "cart" not in st.session_state or not isinstance(st.session_state.cart, dict):
     st.session_state.cart = {}
 if "editing_code" not in st.session_state:
     st.session_state.editing_code = None
 
+if "authenticated_user" not in st.session_state:
+    st.session_state.authenticated_user = None
+if "user_role" not in st.session_state:
+    st.session_state.user_role = "client"
+
 query_params = st.query_params
-url_admin = query_params.get("admin", "false").lower() == "true"
+if query_params.get("admin", "false").lower() == "true":
+    st.session_state.authenticated_user = "ADMIN"
+    st.session_state.user_role = "admin"
 
-if "is_admin" not in st.session_state:
-    st.session_state.is_admin = url_admin
-elif url_admin:
-    st.session_state.is_admin = True
+# Sidebar Authentication Box
+st.sidebar.markdown("### 🔑 Staff Portal Login")
 
-st.sidebar.markdown("### 🔒 Staff Authentication")
-if not st.session_state.is_admin:
-    pin_input = st.sidebar.text_input(
-        "Admin PIN", type="password", placeholder="1234"
-    )
-    if st.sidebar.button("Unlock Admin"):
-        if pin_input == "1234":
-            st.session_state.is_admin = True
-            st.sidebar.success("Unlocked Admin Access!")
-            st.rerun()
-        else:
-            st.sidebar.error("Incorrect PIN!")
+if st.session_state.authenticated_user is None:
+    with st.sidebar.form("sidebar_login_form"):
+        login_user = st.text_input("Username / Cashier Name", placeholder="e.g. admin or CASHIER1")
+        login_pass = st.text_input("Password", type="password", placeholder="••••••••")
+        submit_login = st.form_submit_button("🔓 Log In", use_container_width=True)
+
+        if submit_login:
+            user_info = authenticate_user(login_user, login_pass)
+            if user_info:
+                st.session_state.authenticated_user = user_info["name"]
+                st.session_state.user_role = user_info["role"]
+                st.success(f"Welcome, {user_info['name']}!")
+                st.rerun()
+            else:
+                st.error("Invalid Username or Password!")
 else:
-    st.sidebar.success("🔓 Admin Mode Active")
-    if st.sidebar.button("🔒 Lock Admin Access"):
-        st.session_state.is_admin = False
+    st.sidebar.success(
+        f"👤 **{st.session_state.authenticated_user}**\n\nRole: `{st.session_state.user_role.upper()}`"
+    )
+    if st.sidebar.button("🔒 Log Out", use_container_width=True):
+        st.session_state.authenticated_user = None
+        st.session_state.user_role = "client"
         st.query_params.clear()
         st.rerun()
 
-# Load Settings
+# Load Global Settings
 company_name_setting = get_setting("company_name", "SYARIKAT NGAI HUAT SDN BHD")
 active_branch_setting = get_setting("active_branch_location", "")
 img_size = int(get_setting("item_image_width", "100"))
 
 # ==========================================
-# CLIENT HP SELF-ORDERING PORTAL
+# 1. CLIENT HP SELF-ORDERING PORTAL (PUBLIC)
 # ==========================================
-if not st.session_state.is_admin:
+if st.session_state.user_role == "client":
     st.markdown(MOBILE_CSS, unsafe_allow_html=True)
     components.html(LIVE_SEARCH_JS, height=0)
 
@@ -734,9 +789,99 @@ if not st.session_state.is_admin:
                 st.rerun()
 
 # ==========================================
-# STAFF POS & ADMIN MANAGEMENT VIEW
+# 2. CASHIER VIEW (LOCKED TO POS & ORDERS)
 # ==========================================
-else:
+elif st.session_state.user_role == "cashier":
+    st.title(
+        f"🏪 {company_name_setting} - Cashier Counter ({st.session_state.authenticated_user})"
+    )
+
+    tab_pos, tab_process = st.tabs(["🛒 Sales Counter", "⏳ Processing Orders"])
+
+    with tab_pos:
+        st.subheader("Sales Counter (Cashier Mode)")
+        st.info("Staff POS interface for counter cashiers.")
+
+    with tab_process:
+        c_head, c_month_select = st.columns([3, 1.2])
+        with c_head:
+            st.subheader("📊 Processing Orders Management")
+        with c_month_select:
+            month_options = get_available_order_months()
+            selected_month = st.selectbox(
+                "📅 Filter by Month:", month_options, index=0, key="cashier_m_filter"
+            )
+
+        pending_orders = get_orders_by_status("Pending", selected_month)
+        subtotal_pending = sum(o[5] for o in pending_orders)
+
+        st.metric(
+            "Pending Orders Value",
+            f"RM {subtotal_pending:.2f}",
+            f"{len(pending_orders)} pending",
+        )
+        st.write("---")
+
+        if not pending_orders:
+            st.info(f"No pending orders for {selected_month}.")
+        else:
+            for order in pending_orders:
+                (
+                    order_no,
+                    cust_name,
+                    loc,
+                    cashier,
+                    items_str,
+                    total_amt,
+                    created_at,
+                    _,
+                    _,
+                    _,
+                ) = order
+
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([2.5, 3, 1.8])
+                    with col1:
+                        st.markdown(f"🏷️ **Order No:** `{order_no}`")
+                        st.write(f"👤 **Customer:** {cust_name}")
+                        st.caption(
+                            f"📍 Location: {loc} | Cashier: {cashier}"
+                        )
+                        st.caption(f"🕒 **Created Time:** {created_at}")
+                    with col2:
+                        st.write("🛒 **Summary:**")
+                        st.write(items_str)
+                        st.markdown(
+                            f"💰 **Total Amount:** **RM {total_amt:.2f}**"
+                        )
+
+                    with col3:
+                        st.write(" ")
+                        if st.button(
+                            "✅ Complete Order",
+                            key=f"cashier_comp_{order_no}",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            update_order_status(order_no, "Completed")
+                            st.success(f"Order {order_no} completed!")
+                            st.rerun()
+
+                        if st.button(
+                            "❌ Cancel Order",
+                            key=f"cashier_canc_{order_no}",
+                            use_container_width=True,
+                        ):
+                            update_order_status(
+                                order_no, "Cancelled", "Cancelled by Cashier"
+                            )
+                            st.success(f"Order {order_no} cancelled!")
+                            st.rerun()
+
+# ==========================================
+# 3. FULL ADMIN MANAGEMENT VIEW
+# ==========================================
+elif st.session_state.user_role == "admin":
     st.title(f"🏪 {company_name_setting} - Staff POS & Admin")
 
     tab_pos, tab_process, tab_item_out, tab_manage, tab_settings = st.tabs([
@@ -1242,7 +1387,7 @@ else:
                             st.session_state.manage_action = "✏️ Edit / Update Item"
                             st.rerun()
 
-    # --- TAB 5: SYSTEM CONFIGURATION, COMPANY & LOCATION SETTINGS ---
+    # --- TAB 5: SYSTEM CONFIGURATION, USER & LOCATION MANAGEMENT ---
     with tab_settings:
         st.subheader("⚙️ System Configuration & General Settings")
 
@@ -1303,80 +1448,98 @@ else:
 
         col_users, col_locs = st.columns(2)
 
-        # Cashiers & Email Credentials Management
+        # Cashiers & Users Role Management
         with col_users:
             with st.container(border=True):
-                st.markdown("### 👤 Cashiers / Staff Emails")
+                st.markdown("### 👤 User & Cashier Management")
 
                 with st.form("add_cashier_form", clear_on_submit=True):
-                    st.caption(
-                        "Add cashier with sending Gmail account & App Password:"
-                    )
-                    new_c_name = st.text_input("Cashier Name *").upper().strip()
-                    new_c_email = st.text_input("Gmail Address")
-                    new_c_pass = st.text_input(
-                        "Gmail App Password (16 chars)", type="password"
+                    st.caption("Add new staff member / cashier login:")
+                    new_c_name = st.text_input("Username / Cashier Name *").upper().strip()
+                    new_c_pass = st.text_input("Login Password *", type="password")
+                    new_c_role = st.selectbox("Role Permission", ["cashier", "admin"])
+                    new_c_email = st.text_input("Gmail Address (Optional)")
+                    new_c_smtp = st.text_input(
+                        "Gmail App Password (Optional)", type="password"
                     )
 
-                    if st.form_submit_button("➕ Add Cashier"):
-                        if new_c_name:
-                            add_cashier(new_c_name, new_c_email, new_c_pass)
-                            st.success(f"Added cashier {new_c_name}")
+                    if st.form_submit_button("➕ Add User"):
+                        if new_c_name and new_c_pass:
+                            add_cashier(
+                                new_c_name,
+                                new_c_pass,
+                                new_c_role,
+                                new_c_email,
+                                new_c_smtp,
+                            )
+                            st.success(f"Added {new_c_role.upper()} user `{new_c_name}`")
                             st.rerun()
+                        else:
+                            st.error("Please fill in both Username and Password!")
 
                 st.write("---")
-                st.markdown("**Drag to Reorder Cashiers:**")
+                st.markdown("**Drag to Reorder Cashiers Display:**")
                 current_cashiers_list = get_cashiers()
                 sorted_cashiers = sort_items(
                     current_cashiers_list, key="sort_cashiers"
                 )
-                if st.button("💾 Save Cashier Order", use_container_width=True):
+                if st.button("💾 Save Display Order", use_container_width=True):
                     save_cashiers_order(sorted_cashiers)
                     st.rerun()
 
                 st.write("---")
-                st.markdown("**Manage Selected Cashier:**")
+                st.markdown("**Manage Existing User:**")
                 selected_cashier_to_edit = st.selectbox(
-                    "Select Cashier to Edit/Delete:",
+                    "Select User to Edit/Delete:",
                     current_cashiers_list,
                     key="sel_cashier_edit",
                 )
-                curr_email, curr_pass = get_cashier_details(
+                c_pass, c_role, c_email, c_smtp = get_cashier_details(
                     selected_cashier_to_edit
                 )
 
                 with st.form("form_manage_selected_cashier"):
                     edited_c_name = st.text_input(
-                        "Cashier Name", value=selected_cashier_to_edit
-                    )
-                    edited_c_email = st.text_input(
-                        "Cashier Gmail Address", value=curr_email
+                        "Username", value=selected_cashier_to_edit
                     )
                     edited_c_pass = st.text_input(
-                        "Cashier Gmail App Password",
-                        value=curr_pass,
-                        type="password",
+                        "Password", value=c_pass, type="password"
+                    )
+                    edited_c_role = st.selectbox(
+                        "Role Permission",
+                        ["cashier", "admin"],
+                        index=0 if c_role == "cashier" else 1,
+                    )
+                    edited_c_email = st.text_input(
+                        "Gmail Address", value=c_email
+                    )
+                    edited_c_smtp = st.text_input(
+                        "Gmail App Password", value=c_smtp, type="password"
                     )
 
                     c_c_save, c_c_del = st.columns(2)
                     with c_c_save:
-                        if st.form_submit_button("💾 Save Credentials"):
-                            if edited_c_name.strip():
+                        if st.form_submit_button("💾 Save Changes"):
+                            if edited_c_name.strip() and edited_c_pass.strip():
                                 update_cashier_details(
                                     selected_cashier_to_edit,
                                     edited_c_name,
-                                    edited_c_email,
                                     edited_c_pass,
+                                    edited_c_role,
+                                    edited_c_email,
+                                    edited_c_smtp,
                                 )
                                 st.success(
-                                    f"Updated cashier {edited_c_name.upper()}"
+                                    f"Updated user `{edited_c_name.upper()}`"
                                 )
                                 st.rerun()
+                            else:
+                                st.error("Username and Password cannot be empty!")
                     with c_c_del:
-                        if st.form_submit_button("🗑️ Delete Cashier"):
+                        if st.form_submit_button("🗑️ Delete User"):
                             delete_cashier(selected_cashier_to_edit)
                             st.success(
-                                f"Deleted cashier {selected_cashier_to_edit}"
+                                f"Deleted user `{selected_cashier_to_edit}`"
                             )
                             st.rerun()
 
