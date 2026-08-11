@@ -1467,7 +1467,7 @@ elif st.session_state.user_role == "admin":
                 "Copy and send these exact links to customers or turn them into QR codes:"
             )
 
-            base_app_url = "https://t-ordering.streamlit.app"
+            base_app_url = "https://ngai-huat-ordering.streamlit.app"
             for loc in get_locations():
                 encoded_loc = urllib.parse.quote(loc)
                 branch_link = f"{base_app_url}/?shop={encoded_loc}"
