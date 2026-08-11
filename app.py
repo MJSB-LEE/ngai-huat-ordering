@@ -85,7 +85,6 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
 
-    /* FORCE HORIZONTAL FLEX LAYOUT FOR + / QUANTITY / - BUTTONS ON MOBILE */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -470,6 +469,81 @@ def update_order_status(order_no, status, cancel_reason=""):
 
 
 # ==========================================
+# CLIENT-SIDE 0MS INSTANT JS CATALOG RENDERER
+# ==========================================
+def render_instant_catalog(menu_data, current_cart):
+    """Renders catalog using local JavaScript for 0ms button clicks."""
+    menu_json = json.dumps(menu_data)
+    cart_json = json.dumps(current_cart)
+
+    html_code = f"""
+    <div id="catalog"></div>
+    <script>
+        const menu = {menu_json};
+        let cart = {cart_json};
+
+        function render() {{
+            const container = document.getElementById('catalog');
+            container.innerHTML = '';
+            
+            for (const [code, item] of Object.entries(menu)) {{
+                const qty = cart[code] || 0;
+                const card = document.createElement('div');
+                card.style.cssText = 'border: 1px solid #333; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #1e1e1e; color: #fff; font-family: sans-serif;';
+                
+                let imageHtml = '';
+                if (item.image) {{
+                    imageHtml = `<img src="${{item.image}}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; margin-right: 12px;" />`;
+                }}
+
+                let btnHtml = '';
+                if (qty === 0) {{
+                    btnHtml = `<button onclick="changeQty('${{code}}', 1)" style="width:100%; padding:10px; background:#27ae60; color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">➕ Add</button>`;
+                }} else {{
+                    btnHtml = `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+                            <button onclick="changeQty('${{code}}', -1)" style="flex:1; padding:10px; background:#c0392b; color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">➖</button>
+                            <span style="flex:1; text-align:center; font-size:18px; font-weight:bold;">${{qty}}</span>
+                            <button onclick="changeQty('${{code}}', 1)" style="flex:1; padding:10px; background:#27ae60; color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">➕</button>
+                        </div>
+                    `;
+                }}
+
+                card.innerHTML = `
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        ${{imageHtml}}
+                        <div>
+                            <div style="font-weight:bold; font-size:15px;">[${{code}}] ${{item.name}}</div>
+                            <div style="color:#27ae60; font-weight:bold; margin-top: 4px;">RM ${{item.price.toFixed(2)}}</div>
+                        </div>
+                    </div>
+                    ${{btnHtml}}
+                `;
+                container.appendChild(card);
+            }}
+        }}
+
+        function changeQty(code, delta) {{
+            const current = cart[code] || 0;
+            const updated = current + delta;
+            if (updated <= 0) {{
+                delete cart[code];
+            }} else {{
+                cart[code] = updated;
+            }}
+            // 0ms instant UI update on phone screen
+            render();
+            // Send updated cart object back to Streamlit
+            window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: cart }}, '*');
+        }}
+
+        render();
+    </script>
+    """
+    return components.html(html_code, height=520, scrolling=True)
+
+
+# ==========================================
 # APP SESSION STATE & CONTROLS
 # ==========================================
 if "cart" not in st.session_state:
@@ -578,97 +652,10 @@ if not st.session_state.is_admin:
     if not filtered_menu:
         st.warning("No items match your search or selected category.")
     else:
-        for code, item in filtered_menu.items():
-            with st.container(border=True):
-                # Items WITH image: 2-column layout
-                if item.get("image"):
-                    col_img, col_detail = st.columns([1, 2.2])
-                    with col_img:
-                        st.image(item["image"], use_container_width=True)
-                    with col_detail:
-                        st.markdown(f"**[{code}] {item['name']}**")
-                        st.markdown(
-                            f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
-                            unsafe_allow_html=True,
-                        )
-
-                        curr_qty = st.session_state.cart.get(code, 0)
-                        if curr_qty == 0:
-                            if st.button(
-                                "➕ Add",
-                                key=f"hp_add_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] = 1
-                                st.rerun()
-                        else:
-                            q_c1, q_c2, q_c3 = st.columns([1, 1, 1])
-                            with q_c1:
-                                if st.button(
-                                    "➖",
-                                    key=f"hp_minus_{code}",
-                                    use_container_width=True,
-                                ):
-                                    st.session_state.cart[code] -= 1
-                                    if st.session_state.cart[code] <= 0:
-                                        del st.session_state.cart[code]
-                                    st.rerun()
-                            with q_c2:
-                                st.markdown(
-                                    f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
-                                    unsafe_allow_html=True,
-                                )
-                            with q_c3:
-                                if st.button(
-                                    "➕",
-                                    key=f"hp_plus_{code}",
-                                    use_container_width=True,
-                                ):
-                                    st.session_state.cart[code] += 1
-                                    st.rerun()
-
-                # Items WITHOUT image: Full-width layout
-                else:
-                    st.markdown(f"**[{code}] {item['name']}**")
-                    st.markdown(
-                        f"<span style='color:#27ae60;font-weight:bold;'>RM {item['price']:.2f}</span>",
-                        unsafe_allow_html=True,
-                    )
-
-                    curr_qty = st.session_state.cart.get(code, 0)
-                    if curr_qty == 0:
-                        if st.button(
-                            "➕ Add",
-                            key=f"hp_add_{code}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.cart[code] = 1
-                            st.rerun()
-                    else:
-                        q_c1, q_c2, q_c3 = st.columns([1, 1, 1])
-                        with q_c1:
-                            if st.button(
-                                "➖",
-                                key=f"hp_minus_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] -= 1
-                                if st.session_state.cart[code] <= 0:
-                                    del st.session_state.cart[code]
-                                st.rerun()
-                        with q_c2:
-                            st.markdown(
-                                f"<h4 style='text-align:center;margin:0;line-height:40px;'>{curr_qty}</h4>",
-                                unsafe_allow_html=True,
-                            )
-                        with q_c3:
-                            if st.button(
-                                "➕",
-                                key=f"hp_plus_{code}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.cart[code] += 1
-                                st.rerun()
+        # Zero-delay client-side JS catalog update
+        js_cart = render_instant_catalog(filtered_menu, st.session_state.cart)
+        if js_cart is not None:
+            st.session_state.cart = js_cart
 
     st.write("---")
     st.markdown("### 🛒 Your Order Slip")
